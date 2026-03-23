@@ -1,0 +1,23 @@
+[Unit]
+Description=Cloud Foundry VM State Preservation
+Documentation=https://github.com/konveyor/asset-generation/blob/main/docs/deploying-cf-locally.md
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+Requires=vboxdrv.service
+After=vboxdrv.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/bin/true
+ExecStop=/home/sekumar/pcf2ocp/cf-creator/ec2-management/cf-preserve.sh
+TimeoutStopSec=300
+StandardOutput=journal
+StandardError=journal
+
+# Run as root for VirtualBox operations
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

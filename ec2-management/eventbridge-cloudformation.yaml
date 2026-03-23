@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'EventBridge scheduled shutdown for Cloud Foundry EC2 instance'
+
+Parameters:
+  EC2InstanceId:
+    Type: String
+    Description: EC2 Instance ID to stop (e.g., i-1234567890abcdef0)
+    AllowedPattern: '^i-[a-f0-9]{8,17}$'
+    ConstraintDescription: Must be a valid EC2 instance ID
+
+  ShutdownSchedule:
+    Type: String
+    Description: Cron expression for shutdown schedule (UTC time)
+    Default: 'cron(0 22 * * ? *)'
+    AllowedPattern: '^cron\(.+\)$'
+    ConstraintDescription: Must be a valid cron expression
+
+  Region:
+    Type: String
+    Description: AWS Region where the EC2 instance is located
+    Default: us-east-1
+    AllowedValues:
+      - us-east-1
+      - us-east-2
+      - us-west-1
+      - us-west-2
+      - eu-west-1
+      - eu-central-1
+      - ap-southeast-1
+      - ap-northeast-1
+
+  SNSEmailAddress:
+    Type: String
+    Description: Email address for shutdown notifications (optional)
+    Default: ''
+
+Conditions:
+  CreateSNSTopic: !Not [!Equals [!Ref SNSEmailAddress, '']]
+
+Resources:
+  # IAM Role for EventBridge to stop EC2 instances
+  EventBridgeEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EventBridge-CF-EC2-Stop-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EC2StopInstancePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:StopInstances
+                  - ec2:DescribeInstances
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    'ec2:ResourceTag/ManagedBy': 'CloudFormation-CF-Shutdown'
+
+  # SNS Topic for notifications (optional)
+  CFNotificationTopic:
+    Type: AWS::SNS::Topic
+    Condition: CreateSNSTopic
+    Properties:
+      TopicName: CF-Shutdown-Notifications
+      DisplayName: Cloud Foundry EC2 Shutdown Notifications
+      Subscription:
+        - Endpoint: !Ref SNSEmailAddress
+          Protocol: email
+
+  # EventBridge Rule for scheduled shutdown
+  CFDailyShutdownRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: CF-Daily-Shutdown
+      Description: !Sub 'Stop Cloud Foundry EC2 instance ${EC2InstanceId} on schedule'
+      ScheduleExpression: !Ref ShutdownSchedule
+      State: ENABLED
+      Targets:
+        - Id: StopEC2Instance
+          Arn: !Sub 'arn:aws:ec2:${Region}:${AWS::AccountId}:instance/${EC2InstanceId}'
+          RoleArn: !GetAtt EventBridgeEC2Role.Arn
+          Input: !Sub |
+            {
+              "InstanceIds": ["${EC2InstanceId}"]
+            }
+
+  # CloudWatch Log Group for EventBridge events
+  CFShutdownLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/events/cf-shutdown
+      RetentionInDays: 30
+
+  # EventBridge Rule to log all shutdown events
+  CFShutdownLogRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: CF-Shutdown-Logger
+      Description: Log all CF shutdown events
+      EventPattern:
+        source:
+          - aws.ec2
+        detail-type:
+          - EC2 Instance State-change Notification
+        detail:
+          state:
+            - stopping
+            - stopped
+          instance-id:
+            - !Ref EC2InstanceId
+      State: ENABLED
+      Targets:
+        - Id: LogToCloudWatch
+          Arn: !GetAtt CFShutdownLogGroup.Arn
+
+Outputs:
+  EventBridgeRuleName:
+    Description: Name of the EventBridge rule
+    Value: !Ref CFDailyShutdownRule
+
+  EventBridgeRoleArn:
+    Description: ARN of the IAM role used by EventBridge
+    Value: !GetAtt EventBridgeEC2Role.Arn
+
+  ScheduleExpression:
+    Description: Cron expression for the shutdown schedule
+    Value: !Ref ShutdownSchedule
+
+  EC2InstanceId:
+    Description: EC2 Instance ID being managed
+    Value: !Ref EC2InstanceId
+
+  SNSTopicArn:
+    Description: ARN of the SNS topic for notifications
+    Value: !If [CreateSNSTopic, !Ref CFNotificationTopic, 'Not created']
+    Condition: CreateSNSTopic
+
+  LogGroupName:
+    Description: CloudWatch Log Group for shutdown events
+    Value: !Ref CFShutdownLogGroup
+
+  NextSteps:
+    Description: Next steps after stack creation
+    Value: |
+      1. Tag your EC2 instance with 'ManagedBy: CloudFormation-CF-Shutdown'
+      2. Confirm SNS subscription email (if provided)
+      3. Monitor CloudWatch Logs: /aws/events/cf-shutdown
+      4. Test the rule by waiting for scheduled time or triggering manually

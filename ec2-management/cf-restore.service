@@ -1,0 +1,25 @@
+[Unit]
+Description=Cloud Foundry VM State Restoration
+Documentation=https://github.com/konveyor/asset-generation/blob/main/docs/deploying-cf-locally.md
+After=network.target network-online.target vboxdrv.service
+Wants=network-online.target
+Requires=vboxdrv.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/sekumar/pcf2ocp/cf-creator/ec2-management/cf-restore.sh
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+
+# Run as root for VirtualBox and network operations
+User=root
+Group=root
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
