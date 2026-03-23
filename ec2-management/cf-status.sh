@@ -9,6 +9,9 @@
 #   ./cf-status.sh
 ###############################################################################
 
+# Detect script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -16,7 +19,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-STATE_DIR="/home/sekumar/.cf-vm-state"
+STATE_DIR="$SCRIPT_DIR/.state"
 BOSH_INTERNAL_IP="192.168.56.6"
 CF_API="https://api.bosh-lite.com"
 

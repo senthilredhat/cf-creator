@@ -12,10 +12,13 @@
 
 set -e
 
+# Detect script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Configuration
 LOG_FILE="/var/log/cf-preserve.log"
 NOTIFICATION_LOG="/var/log/cf-shutdown-notifications.log"
-STATE_DIR="/home/sekumar/.cf-vm-state"
+STATE_DIR="$SCRIPT_DIR/.state"
 
 # Ensure state directory exists
 mkdir -p "$STATE_DIR"

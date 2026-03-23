@@ -12,10 +12,13 @@
 
 set -e
 
+# Detect script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Configuration
 LOG_FILE="/var/log/cf-restore.log"
 NOTIFICATION_LOG="/var/log/cf-startup-notifications.log"
-STATE_DIR="/home/sekumar/.cf-vm-state"
+STATE_DIR="$SCRIPT_DIR/.state"
 BOSH_INTERNAL_IP="192.168.56.6"
 CF_NETWORK="10.244.0.0/16"
 

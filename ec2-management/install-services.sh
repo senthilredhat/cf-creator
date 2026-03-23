@@ -76,10 +76,22 @@ chmod +x "$SCRIPT_DIR/cf-preserve.sh"
 chmod +x "$SCRIPT_DIR/cf-restore.sh"
 log_success "Scripts made executable"
 
-# Copy service files to systemd directory
-cp "$SCRIPT_DIR/cf-preserve.service" "$SYSTEMD_DIR/"
-cp "$SCRIPT_DIR/cf-restore.service" "$SYSTEMD_DIR/"
-log_success "Service files copied to $SYSTEMD_DIR"
+# Create state directory (relative to script location)
+mkdir -p "$SCRIPT_DIR/.state"
+
+# Get the actual user (not root) if run with sudo
+ACTUAL_USER="${SUDO_USER:-$USER}"
+if [[ "$ACTUAL_USER" != "root" ]] && id "$ACTUAL_USER" &>/dev/null; then
+    chown -R "$ACTUAL_USER":"$ACTUAL_USER" "$SCRIPT_DIR/.state"
+fi
+log_success "State directory created at $SCRIPT_DIR/.state"
+
+# Update service files with actual script paths and copy to systemd directory
+sed "s|/home/sekumar/pcf2ocp/cf-creator/ec2-management|$SCRIPT_DIR|g" \
+    "$SCRIPT_DIR/cf-preserve.service" > "$SYSTEMD_DIR/cf-preserve.service"
+sed "s|/home/sekumar/pcf2ocp/cf-creator/ec2-management|$SCRIPT_DIR|g" \
+    "$SCRIPT_DIR/cf-restore.service" > "$SYSTEMD_DIR/cf-restore.service"
+log_success "Service files copied to $SYSTEMD_DIR with updated paths"
 
 # Reload systemd
 systemctl daemon-reload
@@ -89,11 +101,6 @@ log_success "Systemd daemon reloaded"
 systemctl enable cf-preserve.service
 systemctl enable cf-restore.service
 log_success "Services enabled"
-
-# Create state directory
-mkdir -p /home/sekumar/.cf-vm-state
-chown sekumar:sekumar /home/sekumar/.cf-vm-state
-log_success "State directory created"
 
 # Create log files with proper permissions
 touch /var/log/cf-preserve.log
