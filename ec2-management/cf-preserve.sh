@@ -62,8 +62,26 @@ main() {
     fi
 
     # Get VM UUID
-    log "Detecting VirtualBox VM..."
-    VMUUID=$(VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+    # Detect the actual user who owns the VMs (not root)
+    if [[ -n "$SUDO_USER" ]] && [[ "$SUDO_USER" != "root" ]]; then
+        VM_USER="$SUDO_USER"
+    else
+        # Try to find VMs from common users
+        for user in fedora sekumar ubuntu ec2-user; do
+            if sudo -u "$user" VBoxManage list vms 2>/dev/null | grep -q "vm-"; then
+                VM_USER="$user"
+                break
+            fi
+        done
+    fi
+
+    log "Detecting VirtualBox VM for user: ${VM_USER:-root}..."
+
+    if [[ -n "$VM_USER" ]]; then
+        VMUUID=$(sudo -u "$VM_USER" VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+    else
+        VMUUID=$(VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+    fi
 
     if [[ -z "$VMUUID" ]]; then
         log "WARNING: No VirtualBox VM found with prefix 'vm-'"
@@ -77,7 +95,11 @@ main() {
     echo "$VMUUID" > "$STATE_DIR/vm-uuid"
 
     # Check VM state
-    VM_STATE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+    if [[ -n "$VM_USER" ]]; then
+        VM_STATE=$(sudo -u "$VM_USER" VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+    else
+        VM_STATE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+    fi
     log "Current VM state: $VM_STATE"
 
     if [[ "$VM_STATE" == "saved" ]]; then
@@ -96,7 +118,13 @@ main() {
     log "Saving VM state (this may take a few seconds)..."
     notify "💾 Saving Cloud Foundry VM state..."
 
-    if VBoxManage controlvm "vm-$VMUUID" savestate; then
+    if [[ -n "$VM_USER" ]]; then
+        SAVE_CMD="sudo -u $VM_USER VBoxManage controlvm vm-$VMUUID savestate"
+    else
+        SAVE_CMD="VBoxManage controlvm vm-$VMUUID savestate"
+    fi
+
+    if $SAVE_CMD; then
         log "Successfully saved VM state"
         notify "✅ Cloud Foundry VM state saved successfully"
 

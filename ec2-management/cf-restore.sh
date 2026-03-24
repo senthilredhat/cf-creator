@@ -72,8 +72,26 @@ main() {
     fi
 
     # Get VM UUID
-    log "Detecting VirtualBox VM..."
-    VMUUID=$(VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+    # Detect the actual user who owns the VMs (not root)
+    if [[ -n "$SUDO_USER" ]] && [[ "$SUDO_USER" != "root" ]]; then
+        VM_USER="$SUDO_USER"
+    else
+        # Try to find VMs from common users
+        for user in fedora sekumar ubuntu ec2-user; do
+            if sudo -u "$user" VBoxManage list vms 2>/dev/null | grep -q "vm-"; then
+                VM_USER="$user"
+                break
+            fi
+        done
+    fi
+
+    log "Detecting VirtualBox VM for user: ${VM_USER:-root}..."
+
+    if [[ -n "$VM_USER" ]]; then
+        VMUUID=$(sudo -u "$VM_USER" VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+    else
+        VMUUID=$(VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+    fi
 
     if [[ -z "$VMUUID" ]]; then
         log "WARNING: No VirtualBox VM found with prefix 'vm-'"
@@ -87,7 +105,11 @@ main() {
     echo "$VMUUID" > "$STATE_DIR/vm-uuid"
 
     # Check current VM state
-    VM_STATE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+    if [[ -n "$VM_USER" ]]; then
+        VM_STATE=$(sudo -u "$VM_USER" VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+    else
+        VM_STATE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+    fi
     log "Current VM state: $VM_STATE"
 
     if [[ "$VM_STATE" == "running" ]]; then
@@ -96,24 +118,69 @@ main() {
     else
         # Apply the XML fix for VirtualBox issue
         log "Applying VirtualBox configuration fix..."
-        VM_DIR=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^CfgFile=' | cut -d'"' -f2 | xargs dirname)
+        if [[ -n "$VM_USER" ]]; then
+            VM_CFG_FILE=$(sudo -u "$VM_USER" VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^CfgFile=' | cut -d'"' -f2)
+        else
+            VM_CFG_FILE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^CfgFile=' | cut -d'"' -f2)
+        fi
+        VM_DIR=$(dirname "$VM_CFG_FILE")
         VM_XML_FILE="$VM_DIR/vm-$VMUUID.vbox"
 
         if [[ -f "$VM_XML_FILE" ]]; then
             log "Modifying VirtualBox VM configuration: $VM_XML_FILE"
+
+            # Check current hotpluggable value
+            CURRENT_HOTPLUG=$(xmlstarlet sel -N s=http://www.virtualbox.org/ \
+              -t -v "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
+              "$VM_XML_FILE" 2>/dev/null || echo "not found")
+            log "Current hotpluggable value for port 2: $CURRENT_HOTPLUG"
+
+            # Update the configuration
             xmlstarlet edit --inplace -N s=http://www.virtualbox.org/ \
-              -u "s:VirtualBox/s:Machine/s:Hardware/s:StorageControllers/s:StorageController[@type='AHCI']/s:AttachedDevice[@port=2]/@hotpluggable" \
-              -v "true" "$VM_XML_FILE"
-            log "Configuration updated successfully"
+              -u "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
+              -v "true" "$VM_XML_FILE" 2>&1 | tee -a "$LOG_FILE" || true
+
+            # Verify the change
+            NEW_HOTPLUG=$(xmlstarlet sel -N s=http://www.virtualbox.org/ \
+              -t -v "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
+              "$VM_XML_FILE" 2>/dev/null || echo "not found")
+            log "New hotpluggable value for port 2: $NEW_HOTPLUG"
+
+            if [[ "$NEW_HOTPLUG" == "true" ]]; then
+                log "Configuration updated successfully"
+            else
+                log "WARNING: Failed to update configuration, trying alternative approach..."
+                # Discard saved state instead
+                log "Discarding saved state to allow VM to start..."
+                if [[ -n "$VM_USER" ]]; then
+                    sudo -u "$VM_USER" VBoxManage discardstate "vm-$VMUUID" 2>&1 | tee -a "$LOG_FILE"
+                else
+                    VBoxManage discardstate "vm-$VMUUID" 2>&1 | tee -a "$LOG_FILE"
+                fi
+                log "Saved state discarded - VM will perform fresh boot"
+            fi
         else
             log "WARNING: VM XML file not found: $VM_XML_FILE"
+            log "Discarding saved state to allow VM to start..."
+            if [[ -n "$VM_USER" ]]; then
+                sudo -u "$VM_USER" VBoxManage discardstate "vm-$VMUUID" 2>&1 | tee -a "$LOG_FILE"
+            else
+                VBoxManage discardstate "vm-$VMUUID" 2>&1 | tee -a "$LOG_FILE"
+            fi
+            log "Saved state discarded - VM will perform fresh boot"
         fi
 
         # Start the VM
         log "Starting VirtualBox VM in headless mode..."
         notify "🚀 Starting Cloud Foundry VM..."
 
-        if VBoxManage startvm "vm-$VMUUID" --type headless; then
+        if [[ -n "$VM_USER" ]]; then
+            START_CMD="sudo -u $VM_USER VBoxManage startvm vm-$VMUUID --type headless"
+        else
+            START_CMD="VBoxManage startvm vm-$VMUUID --type headless"
+        fi
+
+        if $START_CMD; then
             log "VM started successfully"
             notify "✅ Cloud Foundry VM started"
         else

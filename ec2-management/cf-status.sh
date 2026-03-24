@@ -56,15 +56,35 @@ main() {
     else
         print_status "ok" "VirtualBox installed"
 
+        # Detect VM owner
+        if [[ -n "$SUDO_USER" ]] && [[ "$SUDO_USER" != "root" ]]; then
+            VM_USER="$SUDO_USER"
+        else
+            for user in fedora sekumar ubuntu ec2-user; do
+                if sudo -u "$user" VBoxManage list vms 2>/dev/null | grep -q "vm-"; then
+                    VM_USER="$user"
+                    break
+                fi
+            done
+        fi
+
         # Check for VM
-        VMUUID=$(VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+        if [[ -n "$VM_USER" ]]; then
+            VMUUID=$(sudo -u "$VM_USER" VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+        else
+            VMUUID=$(VBoxManage list vms | grep vm- | awk -F '[{}]' '{ print $2 }' | head -n1)
+        fi
         if [[ -z "$VMUUID" ]]; then
             print_status "warning" "No Cloud Foundry VM found"
         else
             print_status "ok" "VM found: vm-$VMUUID"
 
             # Get VM state
-            VM_STATE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+            if [[ -n "$VM_USER" ]]; then
+                VM_STATE=$(sudo -u "$VM_USER" VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+            else
+                VM_STATE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+            fi
             if [[ "$VM_STATE" == "running" ]]; then
                 print_status "ok" "VM State: Running"
             elif [[ "$VM_STATE" == "saved" ]]; then

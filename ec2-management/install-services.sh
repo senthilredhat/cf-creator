@@ -148,7 +148,15 @@ log_success "preserved on shutdown and restored on startup."
 echo ""
 
 # Check if a VM exists
-if VBoxManage list vms | grep -q "vm-"; then
+# Check for both root and actual user VMs
+VM_FOUND=false
+if VBoxManage list vms 2>/dev/null | grep -q "vm-"; then
+    VM_FOUND=true
+elif [[ -n "$ACTUAL_USER" ]] && sudo -u "$ACTUAL_USER" VBoxManage list vms 2>/dev/null | grep -q "vm-"; then
+    VM_FOUND=true
+fi
+
+if [[ "$VM_FOUND" == "true" ]]; then
     log_success "VirtualBox VM detected and ready for management"
 else
     log_warning "No VirtualBox VM found yet. Services will activate after CF deployment."
