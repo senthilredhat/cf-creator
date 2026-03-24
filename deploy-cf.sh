@@ -123,22 +123,37 @@ phase1_kernel_setup() {
 
     log "=== Phase 1: Kernel Setup and Locking ==="
 
-    log "Checking default kernel..."
-    sudo grubby --default-kernel
+    log "Detecting default kernel version..."
+    KERNEL_PATH=$(sudo grubby --default-kernel)
+    log "Default kernel: $KERNEL_PATH"
+
+    # Extract version from path like /boot/vmlinuz-6.14.0-63.fc42.x86_64
+    KERNEL_VERSION=$(basename "$KERNEL_PATH" | sed 's/vmlinuz-//')
+    KERNEL_VERSION_SHORT="${KERNEL_VERSION%.x86_64}"
+
+    # Parse version components
+    KERNEL_VER=$(echo "$KERNEL_VERSION_SHORT" | cut -d'-' -f1)   # e.g., 6.14.0
+    KERNEL_REL=$(echo "$KERNEL_VERSION_SHORT" | cut -d'-' -f2)   # e.g., 63
+    KERNEL_DIST=$(echo "$KERNEL_VERSION_SHORT" | cut -d'-' -f3)  # e.g., fc42
+
+    log "Kernel version: $KERNEL_VER"
+    log "Kernel release: $KERNEL_REL"
+    log "Kernel distribution: $KERNEL_DIST"
+    log "Full version string: $KERNEL_VERSION_SHORT"
 
     log "Installing wget..."
     sudo dnf install -y wget
 
     log "Downloading kernel-devel package..."
-    wget https://kojipkgs.fedoraproject.org/packages/kernel/6.15.10/200.fc42/x86_64/kernel-devel-6.15.10-200.fc42.x86_64.rpm
+    wget "https://kojipkgs.fedoraproject.org/packages/kernel/${KERNEL_VER}/${KERNEL_REL}.${KERNEL_DIST}/x86_64/kernel-devel-${KERNEL_VERSION_SHORT}.x86_64.rpm"
 
     log "Installing kernel-devel..."
-    sudo dnf install -y kernel-devel-6.15.10-200.fc42.x86_64.rpm
+    sudo dnf install -y "kernel-devel-${KERNEL_VERSION_SHORT}.x86_64.rpm"
 
     log "Adding kernel version locks..."
-    sudo dnf versionlock add kernel-core-6.15.10-200.fc42.x86_64
-    sudo dnf versionlock add kernel-modules-core-6.15.10-200.fc42.x86_64
-    sudo dnf versionlock add kernel-devel-6.15.10-200.fc42.x86_64
+    sudo dnf versionlock add "kernel-core-${KERNEL_VERSION_SHORT}.x86_64"
+    sudo dnf versionlock add "kernel-modules-core-${KERNEL_VERSION_SHORT}.x86_64"
+    sudo dnf versionlock add "kernel-devel-${KERNEL_VERSION_SHORT}.x86_64"
     sudo dnf versionlock add 'kernel*'
 
     checkpoint "$phase"

@@ -116,51 +116,8 @@ main() {
         log "VM is already running"
         notify "✅ Cloud Foundry VM already running"
     else
-        # Apply the XML fix for VirtualBox issue
-        log "Applying VirtualBox configuration fix..."
-        if [[ -n "$VM_USER" ]]; then
-            VM_CFG_FILE=$(sudo -u "$VM_USER" VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^CfgFile=' | cut -d'"' -f2)
-        else
-            VM_CFG_FILE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^CfgFile=' | cut -d'"' -f2)
-        fi
-        VM_DIR=$(dirname "$VM_CFG_FILE")
-        VM_XML_FILE="$VM_DIR/vm-$VMUUID.vbox"
-
-        if [[ -f "$VM_XML_FILE" ]]; then
-            log "Modifying VirtualBox VM configuration: $VM_XML_FILE"
-
-            # Check current hotpluggable value
-            CURRENT_HOTPLUG=$(xmlstarlet sel -N s=http://www.virtualbox.org/ \
-              -t -v "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
-              "$VM_XML_FILE" 2>/dev/null || echo "not found")
-            log "Current hotpluggable value for port 2: $CURRENT_HOTPLUG"
-
-            # Update the configuration
-            xmlstarlet edit --inplace -N s=http://www.virtualbox.org/ \
-              -u "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
-              -v "true" "$VM_XML_FILE" 2>&1 | tee -a "$LOG_FILE" || true
-
-            # Verify the change
-            NEW_HOTPLUG=$(xmlstarlet sel -N s=http://www.virtualbox.org/ \
-              -t -v "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
-              "$VM_XML_FILE" 2>/dev/null || echo "not found")
-            log "New hotpluggable value for port 2: $NEW_HOTPLUG"
-
-            if [[ "$NEW_HOTPLUG" == "true" ]]; then
-                log "Configuration updated successfully"
-            else
-                log "WARNING: Failed to update configuration, trying alternative approach..."
-                # Discard saved state instead
-                log "Discarding saved state to allow VM to start..."
-                if [[ -n "$VM_USER" ]]; then
-                    sudo -u "$VM_USER" VBoxManage discardstate "vm-$VMUUID" 2>&1 | tee -a "$LOG_FILE"
-                else
-                    VBoxManage discardstate "vm-$VMUUID" 2>&1 | tee -a "$LOG_FILE"
-                fi
-                log "Saved state discarded - VM will perform fresh boot"
-            fi
-        else
-            log "WARNING: VM XML file not found: $VM_XML_FILE"
+        # Helper to discard saved state
+        discard_saved_state() {
             log "Discarding saved state to allow VM to start..."
             if [[ -n "$VM_USER" ]]; then
                 sudo -u "$VM_USER" VBoxManage discardstate "vm-$VMUUID" 2>&1 | tee -a "$LOG_FILE"
@@ -168,6 +125,53 @@ main() {
                 VBoxManage discardstate "vm-$VMUUID" 2>&1 | tee -a "$LOG_FILE"
             fi
             log "Saved state discarded - VM will perform fresh boot"
+        }
+
+        # aborted-saved means the save itself was interrupted/corrupted - discard immediately
+        if [[ "$VM_STATE" == "aborted-saved" ]]; then
+            log "VM is in aborted-saved state (corrupted save) - discarding saved state"
+            discard_saved_state
+        else
+            # Apply the XML fix for the AHCI hotpluggable mismatch
+            log "Applying VirtualBox configuration fix..."
+            if [[ -n "$VM_USER" ]]; then
+                VM_CFG_FILE=$(sudo -u "$VM_USER" VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^CfgFile=' | cut -d'"' -f2)
+            else
+                VM_CFG_FILE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^CfgFile=' | cut -d'"' -f2)
+            fi
+            VM_DIR=$(dirname "$VM_CFG_FILE")
+            VM_XML_FILE="$VM_DIR/vm-$VMUUID.vbox"
+
+            if [[ -f "$VM_XML_FILE" ]]; then
+                log "Modifying VirtualBox VM configuration: $VM_XML_FILE"
+
+                # Check current hotpluggable value
+                CURRENT_HOTPLUG=$(xmlstarlet sel -N s=http://www.virtualbox.org/ \
+                  -t -v "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
+                  "$VM_XML_FILE" 2>/dev/null || echo "not found")
+                log "Current hotpluggable value for port 2: $CURRENT_HOTPLUG"
+
+                # Update the configuration
+                xmlstarlet edit --inplace -N s=http://www.virtualbox.org/ \
+                  -u "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
+                  -v "true" "$VM_XML_FILE" 2>&1 | tee -a "$LOG_FILE" || true
+
+                # Verify the change
+                NEW_HOTPLUG=$(xmlstarlet sel -N s=http://www.virtualbox.org/ \
+                  -t -v "//s:StorageController[@type='AHCI']/s:AttachedDevice[@port='2']/@hotpluggable" \
+                  "$VM_XML_FILE" 2>/dev/null || echo "not found")
+                log "New hotpluggable value for port 2: $NEW_HOTPLUG"
+
+                if [[ "$NEW_HOTPLUG" == "true" ]]; then
+                    log "Configuration updated successfully"
+                else
+                    log "WARNING: Failed to update configuration via XML edit"
+                    discard_saved_state
+                fi
+            else
+                log "WARNING: VM XML file not found: $VM_XML_FILE"
+                discard_saved_state
+            fi
         fi
 
         # Start the VM
@@ -184,9 +188,16 @@ main() {
             log "VM started successfully"
             notify "✅ Cloud Foundry VM started"
         else
-            log "ERROR: Failed to start VM"
-            notify "❌ Failed to start Cloud Foundry VM"
-            exit 1
+            log "WARNING: VM failed to start - discarding saved state and retrying..."
+            discard_saved_state
+            if $START_CMD; then
+                log "VM started successfully after discarding saved state"
+                notify "✅ Cloud Foundry VM started (after state discard)"
+            else
+                log "ERROR: Failed to start VM even after discarding saved state"
+                notify "❌ Failed to start Cloud Foundry VM"
+                exit 1
+            fi
         fi
 
         # Wait for VM to be fully running
@@ -241,3 +252,4 @@ main() {
 
 # Run main function
 main "$@"
+
