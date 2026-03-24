@@ -133,8 +133,9 @@ phase1_kernel_setup() {
 
     # Parse version components
     KERNEL_VER=$(echo "$KERNEL_VERSION_SHORT" | cut -d'-' -f1)   # e.g., 6.14.0
-    KERNEL_REL=$(echo "$KERNEL_VERSION_SHORT" | cut -d'-' -f2)   # e.g., 63
-    KERNEL_DIST=$(echo "$KERNEL_VERSION_SHORT" | cut -d'-' -f3)  # e.g., fc42
+    RELEASE_DIST=$(echo "$KERNEL_VERSION_SHORT" | cut -d'-' -f2) # e.g., 63.fc42
+    KERNEL_REL=$(echo "$RELEASE_DIST" | cut -d'.' -f1)           # e.g., 63
+    KERNEL_DIST=$(echo "$RELEASE_DIST" | cut -d'.' -f2-)         # e.g., fc42
 
     log "Kernel version: $KERNEL_VER"
     log "Kernel release: $KERNEL_REL"
