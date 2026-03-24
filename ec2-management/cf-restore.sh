@@ -132,6 +132,8 @@ main() {
             log "VM is in aborted-saved state (corrupted save) - discarding saved state"
             discard_saved_state
         else
+            log "adding vboxnet0 networking configuration..."
+            sudo vboxmanage hostonlyif ipconfig vboxnet0 --ip 192.168.56.1 --netmask 255.255.255.0
             # Apply the XML fix for the AHCI hotpluggable mismatch
             log "Applying VirtualBox configuration fix..."
             if [[ -n "$VM_USER" ]]; then

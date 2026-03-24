@@ -76,6 +76,13 @@ chmod +x "$SCRIPT_DIR/cf-preserve.sh"
 chmod +x "$SCRIPT_DIR/cf-restore.sh"
 log_success "Scripts made executable"
 
+# Copy scripts to /usr/local/bin/
+cp "$SCRIPT_DIR/cf-preserve.sh" /usr/local/bin/cf-preserve.sh
+cp "$SCRIPT_DIR/cf-restore.sh" /usr/local/bin/cf-restore.sh
+chmod +x /usr/local/bin/cf-preserve.sh
+chmod +x /usr/local/bin/cf-restore.sh
+log_success "Scripts copied to /usr/local/bin/"
+
 # Create state directory (relative to script location)
 mkdir -p "$SCRIPT_DIR/.state"
 
@@ -86,10 +93,10 @@ if [[ "$ACTUAL_USER" != "root" ]] && id "$ACTUAL_USER" &>/dev/null; then
 fi
 log_success "State directory created at $SCRIPT_DIR/.state"
 
-# Update service files with actual script paths and copy to systemd directory
-sed "s|/home/sekumar/pcf2ocp/cf-creator/ec2-management|$SCRIPT_DIR|g" \
+# Update service files to use /usr/local/bin and copy to systemd directory
+sed "s|/home/sekumar/pcf2ocp/cf-creator/ec2-management/cf-preserve.sh|/usr/local/bin/cf-preserve.sh|g; s|/home/sekumar/pcf2ocp/cf-creator/ec2-management|$SCRIPT_DIR|g" \
     "$SCRIPT_DIR/cf-preserve.service" > "$SYSTEMD_DIR/cf-preserve.service"
-sed "s|/home/sekumar/pcf2ocp/cf-creator/ec2-management|$SCRIPT_DIR|g" \
+sed "s|/home/sekumar/pcf2ocp/cf-creator/ec2-management/cf-restore.sh|/usr/local/bin/cf-restore.sh|g; s|/home/sekumar/pcf2ocp/cf-creator/ec2-management|$SCRIPT_DIR|g" \
     "$SCRIPT_DIR/cf-restore.service" > "$SYSTEMD_DIR/cf-restore.service"
 log_success "Service files copied to $SYSTEMD_DIR with updated paths"
 

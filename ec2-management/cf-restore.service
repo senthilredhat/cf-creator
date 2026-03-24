@@ -8,7 +8,7 @@ Requires=vboxdrv.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/home/sekumar/pcf2ocp/cf-creator/ec2-management/cf-restore.sh
+ExecStart=/usr/local/bin/cf-restore.sh
 TimeoutStartSec=600
 StandardOutput=journal
 StandardError=journal
