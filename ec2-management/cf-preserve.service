@@ -5,6 +5,8 @@ DefaultDependencies=no
 Before=shutdown.target reboot.target halt.target
 Requires=vboxdrv.service
 After=vboxdrv.service
+Conflicts=shutdown.target reboot.target halt.target
+Before=shutdown.target reboot.target halt.target
 
 [Service]
 Type=oneshot
