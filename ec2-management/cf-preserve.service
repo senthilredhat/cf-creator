@@ -11,7 +11,7 @@ Type=oneshot
 RemainAfterExit=true
 ExecStart=/bin/true
 ExecStop=/usr/local/bin/cf-preserve.sh
-TimeoutStopSec=300
+TimeoutStopSec=1800
 StandardOutput=journal
 StandardError=journal
 

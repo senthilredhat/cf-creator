@@ -115,8 +115,12 @@ main() {
     fi
 
     # Save VM state
-    log "Saving VM state (this may take a few seconds)..."
-    notify "💾 Saving Cloud Foundry VM state..."
+    log "Saving VM state (this may take 10-20 minutes for large VMs)..."
+    notify "💾 Saving Cloud Foundry VM state (this may take several minutes)..."
+
+    # Record start time
+    SAVE_START=$(date +%s)
+    log "Save started at $(date)"
 
     if [[ -n "$VM_USER" ]]; then
         SAVE_CMD="sudo -u $VM_USER VBoxManage controlvm vm-$VMUUID savestate"
@@ -125,16 +129,37 @@ main() {
     fi
 
     if $SAVE_CMD; then
-        log "Successfully saved VM state"
-        notify "✅ Cloud Foundry VM state saved successfully"
+        # Record end time and calculate duration
+        SAVE_END=$(date +%s)
+        DURATION=$((SAVE_END - SAVE_START))
+        log "Save completed at $(date) - Duration: ${DURATION}s ($(($DURATION / 60))m $(($DURATION % 60))s)"
 
-        # Save timestamp
-        date +%s > "$STATE_DIR/last-saved"
+        # Verify VM is actually in saved state
+        if [[ -n "$VM_USER" ]]; then
+            FINAL_STATE=$(sudo -u "$VM_USER" VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+        else
+            FINAL_STATE=$(VBoxManage showvminfo "vm-$VMUUID" --machinereadable | grep '^VMState=' | cut -d'"' -f2)
+        fi
 
-        log "Preservation complete"
+        if [[ "$FINAL_STATE" == "saved" ]]; then
+            log "Verified: VM state is 'saved'"
+            notify "✅ Cloud Foundry VM state saved successfully (took ${DURATION}s)"
+
+            # Save timestamp and duration
+            date +%s > "$STATE_DIR/last-saved"
+            echo "$DURATION" > "$STATE_DIR/last-save-duration"
+
+            log "Preservation complete"
+        else
+            log "ERROR: VM state is '$FINAL_STATE', expected 'saved'"
+            notify "❌ VM save completed but state verification failed (state: $FINAL_STATE)"
+            exit 1
+        fi
     else
-        log "ERROR: Failed to save VM state"
-        notify "❌ Failed to save Cloud Foundry VM state"
+        SAVE_END=$(date +%s)
+        DURATION=$((SAVE_END - SAVE_START))
+        log "ERROR: Failed to save VM state after ${DURATION}s"
+        notify "❌ Failed to save Cloud Foundry VM state (failed after ${DURATION}s)"
         exit 1
     fi
 
