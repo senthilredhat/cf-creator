@@ -70,7 +70,7 @@ All scripts now detect and use the correct VM owner:
 ### Test 1: Run as your user (should work)
 
 ```bash
-cd /home/sekumar/pcf2ocp/cf-creator/ec2-management
+cd ec2-management
 ./cf-preserve.sh
 ```
 

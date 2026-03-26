@@ -18,6 +18,10 @@ This script automates the deployment process from the [Konveyor asset-generation
 - Internet connectivity
 - Sufficient resources (16GB RAM, 16 CPUs recommended)
 - Hardware virtualization support (VT-x/AMD-V)
+- If you are using EC2 Use
+   - AMID: ami-0007a783d3ea2b227
+   - Name: "Fedora-Cloud-42.20250825.0 (x86_64) for HVM Instances"
+   - M8i.4xlarge instance
 
 ## Quick Start
 

@@ -12,7 +12,8 @@ Get your Cloud Foundry EC2 management up and running in 5 minutes.
 ## Step 1: Install the Services (2 minutes)
 
 ```bash
-cd /home/sekumar/pcf2ocp/cf-creator/ec2-management
+# Navigate to the ec2-management directory in your cloned repository
+cd ec2-management
 sudo ./install-services.sh
 ```
 

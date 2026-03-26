@@ -106,7 +106,8 @@ This solution automatically saves your Cloud Foundry VirtualBox VM state before 
 ### Quick Install
 
 ```bash
-cd /home/sekumar/pcf2ocp/cf-creator/ec2-management
+# Navigate to the ec2-management directory in your cloned repository
+cd ec2-management
 sudo ./install-services.sh
 ```
 
@@ -396,14 +397,17 @@ aws events list-targets-by-rule --rule CF-Daily-Shutdown --region us-east-1
 ### Checking State Files
 
 ```bash
+# Navigate to the ec2-management directory
+cd ec2-management
+
 # Check saved VM UUID
-cat /home/sekumar/.cf-vm-state/vm-uuid
+cat .state/vm-uuid
 
 # Check last save time
-date -d @$(cat /home/sekumar/.cf-vm-state/last-saved)
+date -d @$(cat .state/last-saved)
 
 # Check last restore time
-date -d @$(cat /home/sekumar/.cf-vm-state/last-restored)
+date -d @$(cat .state/last-restored)
 ```
 
 ## Advanced Configuration
@@ -465,14 +469,22 @@ sudo systemctl daemon-reload
 ## Files and Directories
 
 ```
-/home/sekumar/pcf2ocp/cf-creator/ec2-management/
+<repository>/ec2-management/
 ├── cf-preserve.sh              # VM state preservation script
 ├── cf-restore.sh               # VM state restoration script
 ├── cf-status.sh                # Status checker
 ├── install-services.sh         # Installation script
 ├── cf-preserve.service         # Systemd service for preservation
 ├── cf-restore.service          # Systemd service for restoration
+├── .state/                     # VM state tracking (created by install)
+│   ├── vm-uuid                 # Saved VM UUID
+│   ├── last-saved              # Timestamp of last save
+│   └── last-restored           # Timestamp of last restore
 └── README.md                   # This file
+
+/usr/local/bin/
+├── cf-preserve.sh              # Installed preserve script
+└── cf-restore.sh               # Installed restore script
 
 /etc/systemd/system/
 ├── cf-preserve.service         # Installed preserve service
@@ -483,11 +495,6 @@ sudo systemctl daemon-reload
 ├── cf-restore.log              # Restoration operation logs
 ├── cf-shutdown-notifications.log   # Shutdown notifications
 └── cf-startup-notifications.log    # Startup notifications
-
-/home/sekumar/.cf-vm-state/
-├── vm-uuid                     # Saved VM UUID
-├── last-saved                  # Timestamp of last save
-└── last-restored               # Timestamp of last restore
 ```
 
 ## Best Practices

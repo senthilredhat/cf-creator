@@ -93,12 +93,10 @@ if [[ "$ACTUAL_USER" != "root" ]] && id "$ACTUAL_USER" &>/dev/null; then
 fi
 log_success "State directory created at $SCRIPT_DIR/.state"
 
-# Update service files to use /usr/local/bin and copy to systemd directory
-sed "s|/home/sekumar/pcf2ocp/cf-creator/ec2-management/cf-preserve.sh|/usr/local/bin/cf-preserve.sh|g; s|/home/sekumar/pcf2ocp/cf-creator/ec2-management|$SCRIPT_DIR|g" \
-    "$SCRIPT_DIR/cf-preserve.service" > "$SYSTEMD_DIR/cf-preserve.service"
-sed "s|/home/sekumar/pcf2ocp/cf-creator/ec2-management/cf-restore.sh|/usr/local/bin/cf-restore.sh|g; s|/home/sekumar/pcf2ocp/cf-creator/ec2-management|$SCRIPT_DIR|g" \
-    "$SCRIPT_DIR/cf-restore.service" > "$SYSTEMD_DIR/cf-restore.service"
-log_success "Service files copied to $SYSTEMD_DIR with updated paths"
+# Copy service files to systemd directory
+cp "$SCRIPT_DIR/cf-preserve.service" "$SYSTEMD_DIR/cf-preserve.service"
+cp "$SCRIPT_DIR/cf-restore.service" "$SYSTEMD_DIR/cf-restore.service"
+log_success "Service files copied to $SYSTEMD_DIR"
 
 # Reload systemd
 systemctl daemon-reload
