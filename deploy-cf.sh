@@ -276,8 +276,7 @@ phase4_vbox_networking() {
     yq e '.[2].value.cpus=16' -i "$WORKSPACE_DIR/bosh-deployment/virtualbox/cpi.yml"
     yq e '.[2].value.memory=16384' -i "$WORKSPACE_DIR/bosh-deployment/virtualbox/cpi.yml"
 
-    log_warning "Manual configuration files review required..."
-    pause_for_manual "Please review and edit if needed:\n  1. $WORKSPACE_DIR/bosh-deployment/virtualbox/cpi.yml\n  2. $WORKSPACE_DIR/bosh-deployment/virtualbox/outbound-network.yml\n\nYou can edit these files now in another terminal."
+    log_success "Configuration files updated automatically"
 
     log "Creating VirtualBox NAT network..."
     sudo vboxmanage natnetwork add --netname NatNetwork --network 10.0.2.0/24 --dhcp on || log_warning "NAT network may already exist"
@@ -355,7 +354,7 @@ phase5_bosh_deployment() {
     bosh -e vbox env
 
     log "Updating DNS runtime config..."
-    bosh -e vbox update-runtime-config "$WORKSPACE_DIR/bosh-deployment/runtime-configs/dns.yml" --name dns
+    bosh -n -e vbox update-runtime-config "$WORKSPACE_DIR/bosh-deployment/runtime-configs/dns.yml" --name dns
 
     checkpoint "$phase"
     log_success "Phase 5 completed successfully"
@@ -392,13 +391,13 @@ phase6_cf_deployment() {
     log "Stemcell SHA1: $STEMCELL_SHA1"
 
     log "Updating cloud config..."
-    bosh -e vbox update-cloud-config "$HOME/cf-deployment/iaas-support/bosh-lite/cloud-config.yml"
+    bosh -n -e vbox update-cloud-config "$HOME/cf-deployment/iaas-support/bosh-lite/cloud-config.yml"
 
     log "Updating cf-deployment.yml with stemcell information..."
     yq e '.stemcells[0].alias = "default" | .stemcells[0].os = "ubuntu-jammy" | .stemcells[0].version = env(STEMCELL_VERSION)' -i cf-deployment.yml
 
     log "Uploading stemcell to BOSH..."
-    bosh -e vbox upload-stemcell \
+    bosh -n -e vbox upload-stemcell \
       --sha1 "$STEMCELL_SHA1" \
       "https://bosh.io/d/stemcells/bosh-warden-boshlite-ubuntu-jammy-go_agent?v=${STEMCELL_VERSION}"
 
