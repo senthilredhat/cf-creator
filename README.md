@@ -8,7 +8,6 @@ This script automates the deployment process from the [Konveyor asset-generation
 
 - **Error Handling**: Stops immediately when issues occur
 - **Checkpoint System**: Resume from where you left off after fixing issues
-- **Manual Intervention**: Pauses for steps requiring human input
 - **Logging**: Detailed logs of all operations
 - **Idempotency**: Skip already-completed phases
 
@@ -22,6 +21,8 @@ This script automates the deployment process from the [Konveyor asset-generation
    - AMID: ami-0007a783d3ea2b227
    - Name: "Fedora-Cloud-42.20250825.0 (x86_64) for HVM Instances"
    - M8i.4xlarge instance
+
+**IMPORTANT**: Before running the deployment, you MUST update the CPU allocation in [deploy-cf.sh](deploy-cf.sh) (around lines 276-277) to be less than the total number of CPUs available on your host machine. The default value is 16 CPUs, but your system may have fewer or more available.
 
 ## Quick Start
 
@@ -93,9 +94,19 @@ The script will pause during **Phase 4** to allow you to review these configurat
 
 1. `~/workspace/bosh-deployment/virtualbox/cpi.yml`
    - CPU and memory settings (default: 16 CPUs, 16GB RAM)
+   - **CRITICAL**: The CPU value MUST be less than the total CPUs on your host machine
 
 2. `~/workspace/bosh-deployment/virtualbox/outbound-network.yml`
    - DNS configuration (default: 8.8.8.8)
+
+**Before running the deployment**, update the CPU allocation in [deploy-cf.sh:276-277](deploy-cf.sh#L276-L277):
+```bash
+# Update this line - set CPUs to less than your host's total
+yq e '.[2].value.cpus=16' -i "$WORKSPACE_DIR/bosh-deployment/virtualbox/cpi.yml"
+yq e '.[2].value.memory=16384' -i "$WORKSPACE_DIR/bosh-deployment/virtualbox/cpi.yml"
+```
+
+To check your available CPUs, run: `nproc`
 
 **How to handle the pause:**
 1. The script displays the file paths
